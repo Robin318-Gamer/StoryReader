@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StoryReader POC - Google TTS Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 150px;
+            line-height: 1.6;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .audio-player {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .audio-player.show {
+            display: block;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+        }
+
+        .status.loading {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .info-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .info-box strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+            }
+
+            .controls {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ StoryReader POC</h1>
+        <p class="subtitle">Google Cloud Text-to-Speech Demo - Cantonese</p>
+
+        <div class="info-box">
+            <strong>✅ Deployed Version:</strong>
+            This demo uses a secure server-side API. No API key needed!
+        </div>
+
+        <div class="input-group">
+            <label for="text">Text to Convert (Cantonese/Chinese)</label>
+            <textarea id="text" placeholder="Enter text in Chinese...">內地國慶黃金周長假期間，大量市民出行遊玩，路上塞車嚴重。有深圳車主表示，自己昨天（9月30日）中午12點從深圳出發到湖南邵陽，到今天（1日）凌晨3點左右，開了15個小時車還沒出廣東。</textarea>
+        </div>
+
+        <div class="controls">
+            <div class="input-group">
+                <label for="voice">Voice</label>
+                <select id="voice">
+                    <option value="yue-HK-Standard-A">Cantonese (HK) - Female A</option>
+                    <option value="yue-HK-Standard-B">Cantonese (HK) - Male B</option>
+                    <option value="yue-HK-Standard-C">Cantonese (HK) - Female C</option>
+                    <option value="yue-HK-Standard-D">Cantonese (HK) - Male D</option>
+                    <option value="cmn-CN-Standard-A">Mandarin (CN) - Female A</option>
+                    <option value="cmn-CN-Standard-B">Mandarin (CN) - Male B</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label for="speed">Speaking Speed</label>
+                <select id="speed">
+                    <option value="0.75">Slow (0.75x)</option>
+                    <option value="1.0" selected>Normal (1.0x)</option>
+                    <option value="1.25">Fast (1.25x)</option>
+                    <option value="1.5">Very Fast (1.5x)</option>
+                </select>
+            </div>
+        </div>
+
+        <button id="generateBtn" onclick="generateSpeech()">🎵 Generate Speech</button>
+
+        <div id="status" class="status"></div>
+
+        <div id="audioPlayer" class="audio-player">
+            <strong>🎧 Audio Ready</strong>
+            <audio id="audio" controls></audio>
+        </div>
+    </div>
+
+    <script>
+        async function generateSpeech() {
+            const text = document.getElementById('text').value.trim();
+            const voiceName = document.getElementById('voice').value;
+            const speed = parseFloat(document.getElementById('speed').value);
+
+            // Validation
+            if (!text) {
+                showStatus('Please enter text to convert', 'error');
+                return;
+            }
+
+            // Show loading
+            showStatus('Generating speech... Please wait.', 'loading');
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('audioPlayer').classList.remove('show');
+
+            try {
+                // Call our serverless API endpoint
+                const response = await fetch('/api/tts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: voiceName,
+                        speed: speed
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to generate speech');
+                }
+
+                const data = await response.json();
+                
+                // Convert base64 audio to playable format
+                const audioContent = data.audioContent;
+                const audioBlob = base64ToBlob(audioContent, 'audio/mp3');
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                // Play audio
+                const audioElement = document.getElementById('audio');
+                audioElement.src = audioUrl;
+                
+                showStatus('✅ Speech generated successfully!', 'success');
+                document.getElementById('audioPlayer').classList.add('show');
+
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('generateBtn').disabled = false;
+            }
+        }
+
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status show ${type}`;
+        }
+
+        // Allow Enter key in textarea without submitting
+        document.getElementById('text').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                generateSpeech();
+            }
+        });
+    </script>
+</body>
+</html>
