@@ -24,6 +24,12 @@ export default function Home() {
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
 
+  // Calculate character count and byte size
+  const charCount = text.length;
+  const byteSize = new TextEncoder().encode(text).length;
+  const isOverLimit = byteSize > 5000;
+  const willBeSplit = byteSize > 5000;
+
   useEffect(() => {
     // Check authentication
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -91,6 +97,8 @@ export default function Home() {
       
       if (data.cached) {
         setStatus('✅ Speech retrieved from cache!');
+      } else if (data.chunked && data.chunkCount > 1) {
+        setStatus(`✅ Speech generated successfully! (Processed ${data.chunkCount} chunks and merged)`);
       } else {
         setStatus('✅ Speech generated successfully!');
       }
@@ -134,13 +142,30 @@ export default function Home() {
         </div>
       </div>
       <div style={{ marginBottom: 16 }}>
-        <label style={{ fontWeight: 600 }}>Text to Convert</label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <label style={{ fontWeight: 600 }}>Text to Convert</label>
+          <div style={{ fontSize: 14, color: isOverLimit ? '#c62828' : byteSize > 4000 ? '#f57c00' : '#666' }}>
+            {charCount} characters | {byteSize} bytes {isOverLimit && '(⚠️ Will be split into chunks)'}
+            {byteSize > 4000 && !isOverLimit && '(⚠️ Approaching 5000 byte limit)'}
+          </div>
+        </div>
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
           rows={6}
-          style={{ width: '100%', padding: 12, borderRadius: 8, border: '1.5px solid #ccc', marginTop: 8 }}
+          style={{ 
+            width: '100%', 
+            padding: 12, 
+            borderRadius: 8, 
+            border: `1.5px solid ${isOverLimit ? '#c62828' : byteSize > 4000 ? '#f57c00' : '#ccc'}`, 
+            marginTop: 8 
+          }}
         />
+        {willBeSplit && (
+          <div style={{ marginTop: 8, padding: 10, background: '#fff3e0', borderRadius: 6, fontSize: 13, color: '#e65100' }}>
+            ℹ️ Your text exceeds 5000 bytes. It will be automatically split into {Math.ceil(byteSize / 4500)} chunks and merged into a single audio file.
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
         <div style={{ flex: 1 }}>

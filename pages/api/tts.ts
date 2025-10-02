@@ -3,6 +3,8 @@ const STORYREADER_API_VERSION = '2025-10-02T01:00Z';
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { chunkText, getByteSize } from '../../src/utils/textChunker';
+import { mergeMP3Base64 } from '../../src/utils/audioMerger';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -60,6 +62,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const voiceName = voice || 'yue-HK-Standard-A';
     const speedNum = parseFloat(String(speed));
 
+    // Check byte size and chunk if necessary
+    const textByteSize = getByteSize(text);
+    console.log('[TTS API] Text byte size:', textByteSize);
+    
+    const shouldChunk = textByteSize > 4500;
+    let textChunks: string[] = [];
+    
+    if (shouldChunk) {
+      console.log('[TTS API] Text exceeds 4500 bytes, splitting into chunks...');
+      textChunks = chunkText(text);
+      console.log('[TTS API] Split into', textChunks.length, 'chunks');
+    } else {
+      textChunks = [text];
+      console.log('[TTS API] Text within limit, processing as single chunk');
+    }
+
     // Check if this exact request already exists in history
     const { data: existingHistory, error: historyError } = await supabase
       .from('tts_history')
@@ -73,12 +91,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!historyError && existingHistory && existingHistory.length > 0) {
       // Return existing audio from cache
+      console.log('[TTS API] Returning cached audio');
       return res.status(200).json({
         audioUrl: existingHistory[0].audio_url,
         characterCount: text.length,
         voice: voiceName,
         speed: speedNum,
         cached: true,
+        chunked: false,
+        chunkCount: 1,
         version: STORYREADER_API_VERSION,
         timestamp: now,
       });
@@ -98,27 +119,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       voiceName.startsWith('ko') ? 'ko-KR' :
       voiceName.startsWith('fr') ? 'fr-FR' : 'yue-HK';
 
-    const response = await fetch(
-      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          input: { text },
-          voice: { languageCode, name: voiceName },
-          audioConfig: { audioEncoding: 'MP3', speakingRate: speedNum }
-        })
-      }
-    );
+    // Process each chunk and collect audio data
+    console.log('[TTS API] Processing', textChunks.length, 'chunk(s)...');
+    const audioChunks: string[] = [];
+    
+    for (let i = 0; i < textChunks.length; i++) {
+      const chunk = textChunks[i];
+      console.log(`[TTS API] Processing chunk ${i + 1}/${textChunks.length} (${getByteSize(chunk)} bytes)...`);
+      
+      const response = await fetch(
+        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input: { text: chunk },
+            voice: { languageCode, name: voiceName },
+            audioConfig: { audioEncoding: 'MP3', speakingRate: speedNum }
+          })
+        }
+      );
 
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('Google TTS API error:', error);
-      return res.status(response.status).json({ error: error.error?.message || 'Failed to generate speech' });
+      if (!response.ok) {
+        const error = await response.json();
+        console.error(`[TTS API] Google TTS API error on chunk ${i + 1}:`, error);
+        return res.status(response.status).json({ error: error.error?.message || 'Failed to generate speech' });
+      }
+
+      const data = await response.json();
+      audioChunks.push(data.audioContent);
+      console.log(`[TTS API] ✓ Chunk ${i + 1}/${textChunks.length} processed successfully`);
     }
 
-    const data = await response.json();
-    const audioContent = data.audioContent;
+    // Merge audio chunks if there are multiple
+    let audioContent: string;
+    if (audioChunks.length > 1) {
+      console.log('[TTS API] Merging', audioChunks.length, 'audio chunks...');
+      audioContent = mergeMP3Base64(audioChunks);
+      console.log('[TTS API] ✓ Audio chunks merged successfully');
+    } else {
+      audioContent = audioChunks[0];
+    }
 
     // Upload audio to Supabase Storage
     const audioBuffer = Buffer.from(audioContent, 'base64');
@@ -205,6 +246,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         voice: voiceName,
         speed: speedNum,
         cached: false,
+        chunked: textChunks.length > 1,
+        chunkCount: textChunks.length,
         insertError: insertError ? insertError.message : undefined,
         version: STORYREADER_API_VERSION,
         timestamp: now,
