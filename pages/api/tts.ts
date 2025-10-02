@@ -116,6 +116,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     console.log('Upload result:', uploadData, 'Upload error:', uploadError);
 
+    if (uploadError) {
+      console.error('Supabase Storage upload failed:', uploadError.message || uploadError);
+      return res.status(500).json({ error: 'Failed to upload audio to Supabase Storage', details: uploadError.message || uploadError });
+    }
+
     // Get public URL
     const { data: publicUrlData } = supabase.storage.from('audio').getPublicUrl(fileName);
     const audioUrl = publicUrlData?.publicUrl;
@@ -153,7 +158,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         insertError: insertError ? insertError.message : undefined,
       });
     } else {
-      return res.status(500).json({ error: 'Failed to generate audio URL' });
+      return res.status(500).json({ error: 'Failed to generate audio URL after upload' });
     }
   } catch (error: any) {
     console.error('TTS API error:', error);
