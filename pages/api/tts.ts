@@ -1,3 +1,6 @@
+// Version for deployment verification
+const STORYREADER_API_VERSION = '2025-10-02T01:00Z';
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
@@ -6,6 +9,9 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Log version and timestamp for every invocation
+  const now = new Date().toISOString();
+  console.log(`[StoryReader API] Version: ${STORYREADER_API_VERSION}, Timestamp: ${now}`);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -66,6 +72,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         voice: voiceName,
         speed: speedNum,
         cached: true,
+        version: STORYREADER_API_VERSION,
+        timestamp: now,
       });
     }
 
@@ -156,9 +164,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         speed: speedNum,
         cached: false,
         insertError: insertError ? insertError.message : undefined,
+        version: STORYREADER_API_VERSION,
+        timestamp: now,
       });
     } else {
-      return res.status(500).json({ error: 'Failed to generate audio URL after upload' });
+      return res.status(500).json({ error: 'Failed to generate audio URL after upload', version: STORYREADER_API_VERSION, timestamp: now });
     }
   } catch (error: any) {
     console.error('TTS API error:', error);
