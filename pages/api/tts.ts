@@ -12,6 +12,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Log version and timestamp for every invocation
   const now = new Date().toISOString();
   console.log(`[StoryReader API] Version: ${STORYREADER_API_VERSION}, Timestamp: ${now}`);
+  console.log('[DEBUG] Environment check:');
+  console.log('[DEBUG] - NEXT_PUBLIC_SUPABASE_URL exists:', !!supabaseUrl);
+  console.log('[DEBUG] - NEXT_PUBLIC_SUPABASE_URL value:', supabaseUrl);
+  console.log('[DEBUG] - SUPABASE_SERVICE_ROLE_KEY exists:', !!supabaseServiceKey);
+  console.log('[DEBUG] - SUPABASE_SERVICE_ROLE_KEY length:', supabaseServiceKey?.length);
+  console.log('[DEBUG] - Supabase client initialized:', !!supabase);
+  
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -115,28 +122,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Upload audio to Supabase Storage
     const audioBuffer = Buffer.from(audioContent, 'base64');
+    console.log('[DEBUG] Audio buffer created, size:', audioBuffer.length, 'bytes');
+    
     const fileName = `tts-audio/${user.id}/${Date.now()}.mp3`;
+    console.log('[DEBUG] Target file name:', fileName);
+    console.log('[DEBUG] User ID:', user.id);
+    console.log('[DEBUG] Supabase URL:', supabaseUrl);
+    console.log('[DEBUG] Service key exists:', !!supabaseServiceKey);
+    console.log('[DEBUG] Service key length:', supabaseServiceKey?.length);
+    
+    // Check if bucket exists
+    console.log('[DEBUG] Checking if audio bucket exists...');
+    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+    console.log('[DEBUG] Available buckets:', buckets?.map(b => b.name));
+    console.log('[DEBUG] Buckets error:', bucketsError);
+    
+    console.log('[DEBUG] Attempting upload to audio bucket...');
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('audio')
       .upload(fileName, audioBuffer, {
         contentType: 'audio/mp3',
         upsert: false,
       });
-    console.log('Upload result:', uploadData, 'Upload error:', uploadError);
+    console.log('[DEBUG] Upload result data:', JSON.stringify(uploadData, null, 2));
+    console.log('[DEBUG] Upload error:', JSON.stringify(uploadError, null, 2));
 
     if (uploadError) {
-      console.error('Supabase Storage upload failed:', uploadError.message || uploadError);
-      return res.status(500).json({ error: 'Failed to upload audio to Supabase Storage', details: uploadError.message || uploadError });
+      console.error('[ERROR] Supabase Storage upload failed:', uploadError);
+      console.error('[ERROR] Error name:', uploadError.name);
+      console.error('[ERROR] Error message:', uploadError.message);
+      console.error('[ERROR] Error stack:', uploadError.stack);
+      console.error('[ERROR] Full error object:', JSON.stringify(uploadError, null, 2));
+      return res.status(500).json({ 
+        error: 'Failed to upload audio to Supabase Storage', 
+        details: uploadError.message || uploadError,
+        errorName: uploadError.name,
+        errorCode: (uploadError as any).statusCode || (uploadError as any).code,
+        fullError: JSON.stringify(uploadError)
+      });
     }
 
     // Get public URL
+    console.log('[DEBUG] Getting public URL for file:', fileName);
     const { data: publicUrlData } = supabase.storage.from('audio').getPublicUrl(fileName);
     const audioUrl = publicUrlData?.publicUrl;
-    console.log('Public audio URL:', audioUrl);
+    console.log('[DEBUG] Public audio URL:', audioUrl);
+    console.log('[DEBUG] Public URL data:', JSON.stringify(publicUrlData, null, 2));
 
     // Save to history
     let insertError = null;
     if (audioUrl) {
+      console.log('[DEBUG] Saving to tts_history table...');
+      console.log('[DEBUG] Insert data:', { user_id: user.id, text: text.substring(0, 50) + '...', voice: voiceName, speed: speedNum, audio_url: audioUrl });
       const insertRes = await supabase.from('tts_history').insert([
         {
           user_id: user.id,
@@ -147,12 +184,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       ]);
       insertError = insertRes.error;
-      console.log('Insert result:', insertRes);
+      console.log('[DEBUG] Insert result:', JSON.stringify(insertRes, null, 2));
       if (insertError) {
-        console.error('Insert error:', insertError);
+        console.error('[ERROR] Insert error:', JSON.stringify(insertError, null, 2));
+        console.error('[ERROR] Insert error message:', insertError.message);
+        console.error('[ERROR] Insert error details:', insertError.details);
+        console.error('[ERROR] Insert error hint:', insertError.hint);
+      } else {
+        console.log('[DEBUG] Successfully saved to history');
       }
     } else {
-      console.error('No audioUrl to insert');
+      console.error('[ERROR] No audioUrl to insert - upload may have failed silently');
     }
 
     // Always return audioUrl if available, even if insert fails

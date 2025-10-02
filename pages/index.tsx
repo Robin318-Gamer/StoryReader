@@ -57,12 +57,17 @@ export default function Home() {
     setStatus('Generating speech...');
     setAudioUrl(null);
     try {
+      console.log('[Frontend] Starting TTS generation...');
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setStatus('Error: Not authenticated');
+        console.error('[Frontend] No session found');
         return;
       }
+      console.log('[Frontend] Session found, user:', session.user.id);
 
+      console.log('[Frontend] Sending request to /api/tts...');
+      console.log('[Frontend] Request payload:', { text: text.substring(0, 50) + '...', voice, speed });
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: {
@@ -72,12 +77,17 @@ export default function Home() {
         body: JSON.stringify({ text, voice, speed }),
       });
 
+      console.log('[Frontend] Response status:', res.status);
+      console.log('[Frontend] Response OK:', res.ok);
+
       if (!res.ok) {
         const err = await res.json();
+        console.error('[Frontend] Error response:', err);
         throw new Error(err.error || 'Failed to generate speech');
       }
 
       const data = await res.json();
+      console.log('[Frontend] Success response:', data);
       
       if (data.cached) {
         setStatus('✅ Speech retrieved from cache!');
@@ -85,8 +95,15 @@ export default function Home() {
         setStatus('✅ Speech generated successfully!');
       }
       
+      if (data.insertError) {
+        console.warn('[Frontend] Warning: Insert error occurred:', data.insertError);
+        setStatus(status => status + ' (Warning: History not saved)');
+      }
+      
       setAudioUrl(data.audioUrl);
+      console.log('[Frontend] Audio URL set:', data.audioUrl);
     } catch (e: any) {
+      console.error('[Frontend] Exception caught:', e);
       setStatus('Error: ' + e.message);
     } finally {
       setLoading(false);
