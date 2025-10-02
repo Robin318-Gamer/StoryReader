@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../src/utils/supabaseClient';
+import { useRouter } from 'next/router';
 
 const DEFAULT_TEXT =
   '內地國慶黃金周長假期間，大量市民出行遊玩，路上塞車嚴重。有深圳車主表示，自己昨天（9月30日）中午12點從深圳出發到湖南邵陽，到今天（1日）凌晨3點左右，開了15個小時車還沒出廣東。';
@@ -19,26 +21,71 @@ export default function Home() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Check authentication
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.replace('/login');
+      } else {
+        setUser(session.user);
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.replace('/login');
+      } else {
+        setUser(session.user);
+      }
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [router]);
 
   async function handleGenerate() {
+    if (!user) {
+      setStatus('Please log in first');
+      return;
+    }
+
     setLoading(true);
     setStatus('Generating speech...');
     setAudioUrl(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setStatus('Error: Not authenticated');
+        return;
+      }
+
       const res = await fetch('/api/tts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ text, voice, speed }),
       });
+
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || 'Failed to generate speech');
       }
+
       const data = await res.json();
-      const audioContent = data.audioContent;
-      const audioBlob = base64ToBlob(audioContent, 'audio/mp3');
-      setAudioUrl(URL.createObjectURL(audioBlob));
-      setStatus('Speech generated successfully!');
+      
+      if (data.cached) {
+        setStatus('✅ Speech retrieved from cache!');
+      } else {
+        setStatus('✅ Speech generated successfully!');
+      }
+      
+      setAudioUrl(data.audioUrl);
     } catch (e: any) {
       setStatus('Error: ' + e.message);
     } finally {
@@ -46,20 +93,29 @@ export default function Home() {
     }
   }
 
-  function base64ToBlob(base64: string, mimeType: string) {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: mimeType });
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.replace('/login');
   }
+
+  if (!user) return <div>Loading...</div>;
 
   return (
     <div style={{ maxWidth: 700, margin: '40px auto', background: '#fff', borderRadius: 16, boxShadow: '0 8px 32px #0002', padding: 32 }}>
-      <h1>🎙️ StoryReader POC</h1>
-      <p style={{ color: '#666', marginBottom: 24 }}>Google Cloud Text-to-Speech Demo - Cantonese</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h1>🎙️ StoryReader POC</h1>
+          <p style={{ color: '#666', margin: 0 }}>Google Cloud Text-to-Speech Demo</p>
+        </div>
+        <div>
+          <button onClick={() => router.push('/history')} style={{ marginRight: 8, padding: '8px 16px', borderRadius: 8, background: '#667eea', color: '#fff', border: 'none', cursor: 'pointer' }}>
+            History
+          </button>
+          <button onClick={handleLogout} style={{ padding: '8px 16px', borderRadius: 8, background: '#ccc', color: '#333', border: 'none', cursor: 'pointer' }}>
+            Logout
+          </button>
+        </div>
+      </div>
       <div style={{ marginBottom: 16 }}>
         <label style={{ fontWeight: 600 }}>Text to Convert</label>
         <textarea
