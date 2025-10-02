@@ -27,16 +27,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get user from Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader) {
+      console.error('No Authorization header');
       return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    console.log('User from token:', user);
     if (authError || !user) {
+      console.error('Auth error or no user:', authError);
       return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
 
     const { text, voice, speed = 1.0 } = req.body;
     if (!text) {
+      console.error('No text provided');
       return res.status(400).json({ error: 'Text is required' });
     }
 
@@ -52,6 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('voice', voiceName)
       .eq('speed', speedNum)
       .limit(1);
+    console.log('Existing history:', existingHistory, 'History error:', historyError);
 
     if (!historyError && existingHistory && existingHistory.length > 0) {
       // Return existing audio from cache
@@ -67,6 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Call Google TTS API
     const apiKey = process.env.GOOGLE_CLOUD_TTS_API_KEY;
     if (!apiKey) {
+      console.error('No Google TTS API key');
       return res.status(500).json({ error: 'Server configuration error' });
     }
 
@@ -92,6 +98,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!response.ok) {
       const error = await response.json();
+      console.error('Google TTS API error:', error);
       return res.status(response.status).json({ error: error.error?.message || 'Failed to generate speech' });
     }
 
@@ -107,42 +114,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         contentType: 'audio/mp3',
         upsert: false,
       });
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      return res.status(500).json({ error: 'Failed to upload audio' });
-    }
+    console.log('Upload result:', uploadData, 'Upload error:', uploadError);
 
     // Get public URL
     const { data: publicUrlData } = supabase.storage.from('audio').getPublicUrl(fileName);
     const audioUrl = publicUrlData?.publicUrl;
-
-    if (!audioUrl) {
-      return res.status(500).json({ error: 'Failed to generate audio URL' });
-    }
+    console.log('Public audio URL:', audioUrl);
 
     // Save to history
-    const { error: insertError } = await supabase.from('tts_history').insert([
-      {
-        user_id: user.id,
-        text,
-        voice: voiceName,
-        speed: speedNum,
-        audio_url: audioUrl,
-      },
-    ]);
-
-    if (insertError) {
-      console.error('Insert error:', insertError);
+    let insertError = null;
+    if (audioUrl) {
+      const insertRes = await supabase.from('tts_history').insert([
+        {
+          user_id: user.id,
+          text,
+          voice: voiceName,
+          speed: speedNum,
+          audio_url: audioUrl,
+        },
+      ]);
+      insertError = insertRes.error;
+      console.log('Insert result:', insertRes);
+      if (insertError) {
+        console.error('Insert error:', insertError);
+      }
+    } else {
+      console.error('No audioUrl to insert');
     }
 
-    return res.status(200).json({
-      audioUrl,
-      characterCount: text.length,
-      voice: voiceName,
-      speed: speedNum,
-      cached: false,
-    });
+    // Always return audioUrl if available, even if insert fails
+    if (audioUrl) {
+      return res.status(200).json({
+        audioUrl,
+        characterCount: text.length,
+        voice: voiceName,
+        speed: speedNum,
+        cached: false,
+        insertError: insertError ? insertError.message : undefined,
+      });
+    } else {
+      return res.status(500).json({ error: 'Failed to generate audio URL' });
+    }
   } catch (error: any) {
     console.error('TTS API error:', error);
     return res.status(500).json({ error: 'Internal server error', message: error.message });
