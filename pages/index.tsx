@@ -133,6 +133,9 @@ export default function Home() {
           <p style={{ color: '#666', margin: 0 }}>Google Cloud Text-to-Speech Demo</p>
         </div>
         <div>
+          <button onClick={() => router.push('/ssml')} style={{ marginRight: 8, padding: '8px 16px', borderRadius: 8, background: '#764ba2', color: '#fff', border: 'none', cursor: 'pointer' }}>
+            SSML Mode
+          </button>
           <button onClick={() => router.push('/history')} style={{ marginRight: 8, padding: '8px 16px', borderRadius: 8, background: '#667eea', color: '#fff', border: 'none', cursor: 'pointer' }}>
             History
           </button>
