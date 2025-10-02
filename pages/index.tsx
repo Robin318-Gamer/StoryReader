@@ -12,6 +12,9 @@ const VOICES = [
   { value: 'yue-HK-Standard-D', label: 'Cantonese (HK) - Male D' },
   { value: 'cmn-CN-Standard-A', label: 'Mandarin (CN) - Female A' },
   { value: 'cmn-CN-Standard-B', label: 'Mandarin (CN) - Male B' },
+  // English (US) voices
+  { value: 'en-US-Neural2-A', label: 'English (US) - Female A' },
+  { value: 'en-US-Neural2-D', label: 'English (US) - Male D' },
 ];
 
 export default function Home() {
