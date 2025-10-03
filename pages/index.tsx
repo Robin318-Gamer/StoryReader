@@ -235,17 +235,18 @@ export default function Home() {
         )}
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'not-allowed', opacity: 0.5 }}>
           <input
             type="checkbox"
             checked={useSSML}
             onChange={e => setUseSSML(e.target.checked)}
-            style={{ width: 16, height: 16, cursor: 'pointer' }}
+            disabled
+            style={{ width: 16, height: 16, cursor: 'not-allowed' }}
           />
-          <span style={{ fontWeight: 600, fontSize: 14 }}>🎭 Apply Story Teller Tone (SSML with AI)</span>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>🎭 Apply Story Teller Tone (SSML with AI) - Coming Soon</span>
         </label>
-        <p style={{ fontSize: 12, color: '#666', margin: '6px 0 0 24px' }}>
-          Uses Google Gemini AI to analyze your text and add natural storytelling prosody, pauses, and emphasis.
+        <p style={{ fontSize: 12, color: '#999', margin: '6px 0 0 24px' }}>
+          This feature is currently disabled. We're working on improvements to the AI-powered storytelling feature.
         </p>
       </div>
       <div style={{ display: 'flex', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
