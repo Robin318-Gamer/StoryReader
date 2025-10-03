@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
 
-    const { text, voice, speed = 1.0 } = req.body;
+    const { text, voice, speed = 1.0, title } = req.body;
     if (!text) {
       console.error('No text provided');
       return res.status(400).json({ error: 'Text is required' });
@@ -61,6 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const voiceName = voice || 'yue-HK-Standard-A';
     const speedNum = parseFloat(String(speed));
+    const audioTitle = title || text.slice(0, 50) + '...';
 
     // Check byte size and chunk if necessary
     const textByteSize = getByteSize(text);
@@ -218,10 +219,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const insertRes = await supabase.from('tts_history').insert([
         {
           user_id: user.id,
+          title: audioTitle,
           text,
+          original_text: text,
+          ssml_content: null,
           voice: voiceName,
           speed: speedNum,
           audio_url: audioUrl,
+          processing_status: 'completed',
         },
       ]);
       insertError = insertRes.error;

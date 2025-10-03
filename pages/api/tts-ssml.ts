@@ -50,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
 
-    const { ssml, voice, speed = 1.0 } = req.body;
+    const { ssml, voice, speed = 1.0, title } = req.body;
     
     if (!ssml) {
       console.error('[SSML TTS API] No SSML provided');
@@ -68,6 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const voiceName = voice || 'yue-HK-Standard-A';
     const speedNum = parseFloat(String(speed));
+    const audioTitle = title || 'SSML Audio';
 
     console.log('[SSML TTS API] Processing SSML:', {
       ssmlLength: ssml.length,
@@ -156,10 +157,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const insertRes = await supabase.from('tts_history').insert([
         {
           user_id: user.id,
-          text: ssml, // Store SSML in text field (could add separate ssml field in future)
+          title: audioTitle,
+          text: ssml,
+          original_text: null,
+          ssml_content: ssml,
           voice: voiceName,
           speed: speedNum,
           audio_url: audioUrl,
+          processing_status: 'completed',
         },
       ]);
       insertError = insertRes.error;
